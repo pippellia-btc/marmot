@@ -91,15 +91,15 @@ through the required-capability change flow in
 Delivery addresses are not identities.
 
 A group or conversation delivery address MUST NOT be derived from an account id, member id, public key, MLS group id,
-KeyPackage id, message id, relay URL, or other stable identity material. For example, the Nostr group `h` tag is the
-random `nostr_group_id`, not a value derived from any member key.
+KeyPackage id, message id, relay URL, or other stable identity material. For example, the Nostr group routing key is
+the random `nostr_routing_key` (or the random `nostr_group_id` for legacy v1 routing) not a value derived from any member key.
 
 Account-level inbox addressing is the deliberate exception. A transport MAY address an account's own inbox by that
 account's public key, because reaching a specific account is the purpose of an inbox. The active transport binding owns
 the concrete inbox-addressing mechanism; the Nostr rule is defined in [../transports/nostr.md](../transports/nostr.md).
 
-Examples of delivery addresses include a Nostr group `h` tag, an account inbox, a relay list, a topic, or an endpoint
-set. The owning transport document defines how those addresses are generated, updated, validated, and used.
+Examples of delivery addresses include a Nostr group routing address, an account inbox, a relay list, a topic, or an
+endpoint set. The owning transport document defines how those addresses are generated, updated, validated, and used.
 
 ## Application content
 

@@ -1,6 +1,9 @@
 # marmot.transport.nostr.routing.v1
 
-Status: adopted.
+Status: superseded.
+
+This document preserves the legacy v1 routing profile. New Nostr-routed groups use
+[nostr-routing-v2.md](./nostr-routing-v2.md); this document is retained for legacy groups.
 
 ## Registry
 

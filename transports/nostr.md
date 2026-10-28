@@ -14,17 +14,21 @@ This transport document covers only the outer relay-facing Nostr events used to 
 ## Transport name and version
 
 This binding is `marmot.transport.nostr`, version 1. There is no single on-wire version field; the binding is versioned
-structurally through the event kinds, tag shapes, and the `marmot.transport.nostr.routing.v1` component below. An
-interop-visible change uses the narrowest hook in [README.md](./README.md) ("Versioning") — a new envelope version, a
+structurally through the event kinds, tag shapes, and the active `marmot.transport.nostr.routing` component version.
+An interop-visible change uses the narrowest hook in [README.md](./README.md) ("Versioning") — a new envelope version, a
 new Nostr kind, a new routing component id, or a new required capability — rather than a binding-wide version number.
 
 ## Required group state
 
-A Nostr-routed group requires the `marmot.transport.nostr.routing.v1` app component.
+A Nostr-routed group requires exactly one active routing component version:
 
-That component owns:
+- `marmot.transport.nostr.routing.v1` for the v1 envelope profile; or
+- `marmot.transport.nostr.routing.v2` for the v2 envelope profile.
 
-- `nostr_group_id`, the 32-byte transport group id;
+The active component owns:
+
+- v1: `nostr_group_id`, the 32-byte transport group id;
+- v2: `nostr_routing_key`, the shared Nostr key from which the 32-byte routing public key is derived;
 - the canonical relay list for group messages.
 
 The Nostr transport uses those values. It does not derive them from account ids, MLS group ids, KeyPackage ids, relay
@@ -67,7 +71,8 @@ first matching tag and ignore later duplicates.
 
 | Event shape | Tag | Cardinality and value rule |
 | --- | --- | --- |
-| kind `445` group message | `h` | exactly one tag, exactly one value: lowercase hex `nostr_group_id` |
+| kind `445` group message, routing v1 | `h` | exactly one tag, exactly one value: lowercase hex `nostr_group_id` |
+| kind `445` group message, routing v2 | --- | the event carries no tags ("Group message delivery") |
 | kind `1059` welcome gift wrap | `p` | exactly one tag, exactly one value: lowercase hex account identity of the recipient |
 | kind `444` welcome rumor | `e` | exactly one tag, exactly one value: lowercase hex Nostr event id of the claimed KeyPackage event |
 | kind `444` welcome rumor | `relays` | exactly one tag, one or more relay URL values using the relay URL profile |
@@ -88,17 +93,20 @@ those facts MUST fetch and verify the referenced kind `30443` event and then ver
 
 ## Group message delivery
 
-Nostr group messages use Nostr kind `445`.
+Nostr group messages use Nostr kind `445`. The group's active routing component selects one of two envelope profiles.
 
-A kind `445` event MUST include exactly one `h` tag whose value is the lowercase hex encoding of the group's
-`nostr_group_id`. The only other tag permitted on a kind `445` event is the NIP-40 `expiration` tag defined in "Message
-expiration" below; a kind `445` event MUST NOT carry any other tag.
+**Routing v1.** A kind `445` event MUST include exactly one `h` tag whose value is the lowercase hex encoding of the
+group's `nostr_group_id`. The only other tag permitted on the event is the NIP-40 `expiration` tag defined in "Message
+expiration" below; the event MUST NOT carry any other tag. The event `pubkey` MUST be a fresh ephemeral Nostr public key
+generated for that event. The event MUST be signed by the matching ephemeral key. The ephemeral key MUST NOT be the
+sender's Marmot account identity, and it MUST NOT be reused across events.
 
-The event `pubkey` MUST be a fresh ephemeral Nostr public key generated for that event. The kind `445` event MUST be
-signed by the matching ephemeral key. The ephemeral key MUST NOT be the sender's Marmot account identity, and it MUST
-NOT be reused across events.
+**Routing v2.** A kind `445` event MUST be signed by the group's current `nostr_routing_key` as a normal NIP-01 event,
+and its `pubkey` MUST be the routing public key derived from that key. The event MUST NOT carry an `h` tag. The only tag
+permitted on the event is the NIP-40 `expiration` tag defined in "Message expiration"; the event MUST NOT carry any
+other tag. The Nostr routing key is reused across events until a routing rotation replaces it.
 
-The event content carries one encrypted MLS message:
+In both profiles the event content carries one encrypted MLS message:
 
 ```text
 group_event_key = MLS-Exporter("marmot", "group-event", 32)
@@ -124,9 +132,10 @@ collision probability is `q(q-1) / 2^97`.
 The Nostr event id, event `pubkey`, tags, relay timestamp, and relay URL are not AEAD AAD for kind `445`. They are
 validated as the transport envelope and then treated as transport evidence only.
 
-Receivers MUST verify the kind `445` event id and Nostr signature before attempting to decrypt its content. That
-signature proves only integrity of the ephemeral transport envelope. Marmot sender identity still comes from the MLS
-message after decryption.
+Receivers MUST verify the kind `445` event id and Nostr signature before attempting to decrypt its content. In routing
+v1, that signature proves only integrity of the ephemeral transport envelope. In routing v2, it also proves that the
+publisher holds the group Nostr routing key; it does not identify which member published the event. In both profiles,
+Marmot sender identity still comes from the MLS message after decryption.
 
 Receivers MUST reject kind `445` content that is not valid base64 or that decodes to fewer than 28 bytes. The minimum is
 12 nonce bytes plus the 16-byte ChaCha20-Poly1305 tag.
@@ -173,11 +182,16 @@ give the refused event another delivery opportunity by refetching an overlapping
 transport-specific recovery mechanism. Deferred or refused events MUST NOT block unrelated valid input from being
 processed and MUST NOT choose canonical group state.
 
-The public routing id and required fresh ephemeral event key do not provide a member-authenticated prefilter for kind
-`445`; a non-member can submit envelopes that reach trial decryption. Relay admission controls and client-side input,
-CPU, and retry budgets are operational policy, not Marmot group-state rules. In particular, a budget decision MAY drop
-or defer transport input, but it MUST NOT make that input valid, choose a canonical branch, or change the bounded set of
-candidate keys tried for an accepted envelope.
+In routing v1, the public routing id and required fresh ephemeral event key do not provide a member-authenticated
+prefilter for kind `445`; a non-member can submit envelopes that reach trial decryption. In routing v2, the event author
+is the routing public key and the event is signed by the Nostr routing key, so a relay that verifies NIP-01 signatures
+rejects an event whose author is the routing public key but whose signature was not made by the Nostr routing key, and a
+client that fetches with the `authors` filter receives only events signed by a holder of the key. A routing v2 client
+MUST use the `authors` filter and MUST NOT rely on a tag filter for admission.
+
+Relay admission controls and client-side input, CPU, and retry budgets remain operational policy. A budget decision MAY
+drop or defer transport input, but it MUST NOT make that input valid, choose a canonical branch, or change the bounded
+set of candidate keys tried for an accepted envelope.
 
 ## Message expiration
 
@@ -311,10 +325,10 @@ label, model, or platform.
 
 The `i` tag is the KeyPackageRef, not the account identity. Receivers MUST verify it against the decoded KeyPackage.
 
-The `app_components` tag MUST include the value `0x8009` for `marmot.member.account-identity-proof.v2`. Receivers MUST
-still validate the decoded KeyPackage LeafNode's support list and proof data; the transport tag is only an
-advertisement and fetch filter. The current profile does not require legacy extension type `0xf2f1` in
-`mls_extensions`.
+The `app_components` tag MUST include the value `0x8009` for `marmot.member.account-identity-proof.v2`. A client that
+supports `marmot.transport.nostr.routing.v2` MUST also include `0x800e`. Receivers MUST still validate the decoded
+KeyPackage LeafNode's support list and proof data; the transport tag is only an advertisement and fetch filter. The
+current profile does not require legacy extension type `0xf2f1` in `mls_extensions`.
 
 KeyPackage publication is account transport. It helps other users find fresh KeyPackages. It does not create group
 state.
@@ -439,11 +453,16 @@ A Nostr transport client subscribes to:
 
 - account inbox gift wraps: kind `1059`, `p` tag equal to the local account pubkey, on the account's own kind `10050`
   inbox relay set ("Account inbox relays" above);
-- group messages: kind `445`, with a `#h` filter equal to the current `nostr_group_id` or each prior routing id the
-  rotation rules still require, fetched from one or more relays in the routing state associated with that id
-  ([../app-components/nostr-routing-v1.md](../app-components/nostr-routing-v1.md), "Routing rotation"); fetching from
-  every relay in those states is not an interoperability requirement, and the filter does not replace receiver
-  validation of the signed event and exact `h` tag;
+- group messages in a routing v1 group: kind `445`, with a `#h` filter equal to the current `nostr_group_id` or each
+  prior routing id the rotation rules still require, fetched from one or more relays in the routing state associated
+  with that id ([../app-components/nostr-routing-v1.md](../app-components/nostr-routing-v1.md), "Routing rotation");
+  fetching from every relay in those states is not an interoperability requirement, and the filter does not replace
+  receiver validation of the signed event and exact `h` tag;
+- group messages in a routing v2 group: kind `445`, with an `authors` filter equal to the current routing public key or
+  each prior routing public key the rotation rules still require
+  ([../app-components/nostr-routing-v2.md](../app-components/nostr-routing-v2.md), "Routing rotation"). The client MUST
+  NOT use a `#h` filter for routing v2. The `authors` filter is the admission filter; a client still verifies the event
+  signature and exact author before outer decryption;
 - NIP-17 inbox relay lists: kind `10050`, author equal to the account being addressed, to discover that account's
   inbox relay set;
 - NIP-65 relay lists: kind `10002`, author equal to the account being queried, to discover where that account
@@ -461,9 +480,11 @@ fetch hint only.
 
 ## Publish targets and acknowledgements
 
-Group messages are published to the relay list in `marmot.transport.nostr.routing.v1`, after applying any local safety
-policy. A commit that changes routing state is published to the prior epoch's routing address
-([../app-components/nostr-routing-v1.md](../app-components/nostr-routing-v1.md), "Routing rotation").
+Group messages are published to the relay list in the group's active routing component, after applying any local
+safety policy. A commit that changes routing state is published to the prior epoch's routing address, which is the
+prior `nostr_group_id` in routing v1 and the prior routing public key in routing v2
+([../app-components/nostr-routing-v1.md](../app-components/nostr-routing-v1.md) and
+[../app-components/nostr-routing-v2.md](../app-components/nostr-routing-v2.md), "Routing rotation").
 When the sender creates the signed event, it snapshots that applicable relay target list and durably records the
 serialized event plus per-target attempt status. A later routing rotation does not rewrite this fanout obligation.
 
@@ -497,7 +518,7 @@ The event-shape sections above own those rules; this checklist points to them ra
 set:
 
 - kind `445` group messages MUST satisfy every envelope, tag, content, and signature rule in "Group message delivery"
-  before outer decryption;
+  for the group's active routing profile before outer decryption;
 - kind `1059` Welcomes and their kind `444` rumors MUST satisfy every recipient, envelope, tag, content, and signature
   rule in "Welcome delivery" as each NIP-59 layer is unwrapped;
 - kind `30443` KeyPackage events MUST satisfy every outer envelope, tag, content-encoding, and signature rule in
@@ -528,12 +549,17 @@ arrival order, and subscription order are fetch hints only and MUST NOT choose g
 
 Relays see only transport-envelope metadata, never plaintext or MLS secrets:
 
-- kind `445` events expose the group's random `nostr_group_id` via the `h` tag (it is not derived from any member key,
-  so it does not link members across groups), a fresh per-event ephemeral `pubkey` (never the sender's account identity
-  and never reused), the relay timestamp, and — when retention is enabled — the group's retention policy via the
-  NIP-40 `expiration` tag ("Message expiration" above). Tag presence also reveals that the event carries an application
-  message, because commits and proposals never carry it. Tag absence is not conclusive: the tag is a `SHOULD`, and an
-  application message omits it when the exact expiry is unrepresentable. The MLS message is encrypted under the
+- kind `445` events in a routing v1 group expose the random `nostr_group_id` via the `h` tag (it is not derived from
+  any member key, so it does not link members across groups), a fresh per-event ephemeral `pubkey` (never the sender's
+  account identity and never reused), the relay timestamp, and — when retention is enabled — the group's retention
+  policy via the NIP-40 `expiration` tag ("Message expiration" above). Tag presence also reveals that the event carries
+  an application message, because commits and proposals never carry it. Tag absence is not conclusive: the tag is a
+  `SHOULD`, and an application message omits it when the exact expiry is unrepresentable. The MLS message is encrypted
+  under the per-epoch group-event key.
+- kind `445` events in a routing v2 group expose the routing public key as the event author and carry no `h` tag. The
+  author is a random group pseudonym, not an account or member identity. Every current member signs under it, so the
+  relay learns that a member published, not which member. The event signature proves possession of the Nostr routing key.
+    The relay timestamp and the optional `expiration` tag are exposed as in v1. The MLS message is encrypted under the
   per-epoch group-event key.
 - Welcomes are NIP-59 gift wraps addressed to the invitee's account public key; the inbox address is the deliberate
   account-addressing exception ([../foundation/identity.md](../foundation/identity.md)). The gift wrap and seal hide the

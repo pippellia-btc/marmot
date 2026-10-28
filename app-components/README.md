@@ -308,7 +308,7 @@ The currently adopted persistent GroupContext components are:
 - [marmot.group.profile.v1](./group-profile-v1.md)
 - [marmot.group.blossom.image.v1](./group-blossom-image-v1.md)
 - [marmot.group.admin-policy.v1](./admin-policy-v1.md)
-- [marmot.transport.nostr.routing.v1](./nostr-routing-v1.md)
+- [marmot.transport.nostr.routing.v2](./nostr-routing-v2.md)
 - [marmot.group.message-retention.v1](./message-retention-v1.md)
 - [marmot.group.avatar-url.v1](./group-avatar-url-v1.md)
 - [marmot.group.encrypted-media.v2](./group-encrypted-media-v2.md)
@@ -337,8 +337,9 @@ Every Marmot leaf uses the adopted
   every Marmot group. Other Marmot core components are optional unless a group profile, transport, or feature requires
   them.
 - `marmot.group.blossom.image.v1` is Blossom-specific. Other image-reference models SHOULD use separate components.
-- `marmot.transport.nostr.routing.v1` is required for Nostr-routed Marmot groups.
-- Nostr relays in `marmot.transport.nostr.routing.v1` are canonical signed group state, not local hints.
+- `marmot.transport.nostr.routing.v2` is required for new Nostr-routed Marmot groups. A legacy group may continue to
+  require `marmot.transport.nostr.routing.v1`.
+- Nostr relays in the active routing component are canonical signed group state, not local hints.
 - Experimental application profiles MAY require `marmot.group.agent-text-stream.quic.v1` for agent-stream-ready
   groups. Its `receive` role is final-message fallback compatibility, not a requirement to implement the raw QUIC
   live-preview data plane.

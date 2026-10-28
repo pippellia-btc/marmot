@@ -96,7 +96,7 @@ address, a recipient inbox, a relay list, a topic, or an endpoint set.
 
 Transport says how a network carries, publishes, fetches, wraps, and validates those bytes.
 
-For Marmot group messages using Nostr relays for transport, the random `nostr_group_id` and signed group relay list are
+For Marmot group messages using Nostr relays for transport, the random routing address and signed group relay list are
 delivery-address state. The Nostr event shape, relay behavior, gift wrapping, filters, and publishing rules belong in
 the Nostr transport binding.
 

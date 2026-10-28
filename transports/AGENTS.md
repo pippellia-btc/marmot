@@ -23,8 +23,9 @@ transport binding. Current bindings:
   and replay inputs, validation-before-peeling, required capabilities, and metadata-privacy constraints).
 - A transport doc MUST NOT define Marmot account identity, inner app-payload shape, MLS credential binding, group-state
   branch selection, or app-component payload bytes. It says how to find and deliver bytes, never which branch wins.
-- Nostr routing and relays are signed group state owned by `marmot.transport.nostr.routing.v1`
-  ([`../app-components/nostr-routing-v1.md`](../app-components/nostr-routing-v1.md)), not local hints.
+- Nostr routing and relays are signed group state owned by the active `marmot.transport.nostr.routing` component
+  version ([`../app-components/nostr-routing-v2.md`](../app-components/nostr-routing-v2.md) for the current profile,
+  [`../app-components/nostr-routing-v1.md`](../app-components/nostr-routing-v1.md) for legacy), not local hints.
 - An interop-visible transport change needs an explicit hook (a new envelope version, a new kind/route/topic/frame
   type, a new app component id, or a new required capability). Git history is not a version-negotiation mechanism; an
   interop-visible change needs an explicit protocol versioning hook.

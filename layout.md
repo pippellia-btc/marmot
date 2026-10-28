@@ -47,6 +47,7 @@ app-components/
   group-blossom-image-v1.md
   admin-policy-v1.md
   nostr-routing-v1.md
+  nostr-routing-v2.md
   message-retention-v1.md
   agent-text-stream-quic-v1.md
   group-avatar-url-v1.md

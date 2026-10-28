@@ -13,6 +13,20 @@ still needs an explicit versioning hook, as [layout.md](./layout.md#features) re
 The log starts at the 2026-07-05 baseline, the oldest commit on `master`. Earlier MIP-era changes are mapped in
 [mip-coverage.md](./mip-coverage.md).
 
+## 2026-10-28: Nostr routing v2 stores a group key in GroupContext
+
+Adds [app-components/nostr-routing-v2.md](./app-components/nostr-routing-v2.md) and changes
+[app-components/nostr-routing-v1.md](./app-components/nostr-routing-v1.md),
+[app-components/README.md](./app-components/README.md), [foundation/identity.md](./foundation/identity.md),
+[foundation/registries.md](./foundation/registries.md), [principles.md](./principles.md), and
+[transports/nostr.md](./transports/nostr.md). It registers component `0x800e`,
+`marmot.transport.nostr.routing.v2`: a 32-byte `nostr_routing_key` in GroupContext, from which the routing public key
+is derived. Kind `445` events in a v2 group are signed by that key, use the derived public key as their author, and
+carry no `h` tag; members fetch them with an `authors` filter. A relay that verifies NIP-01 signatures therefore rejects
+events from parties without the key. Rotation, convergence and the two-commit removal sequence are the same as v1. A group must not
+require both routing components. New Nostr-routed groups use v2; v1 groups remain valid. Implementers adopting v2 must
+sign kind `445` with the key, filter by `authors`, and reject v2 events that carry `h`. (PR pending.)
+
 ## 2026-10-27: Fair scheduling covers admin and same-account intents only
 
 [#450](https://github.com/marmot-protocol/marmot/pull/450) changes
